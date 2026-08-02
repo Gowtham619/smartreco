@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}SmartReco{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">SmartReco</a>
+      <nav>
+        <a href="/products">Courses</a>
+        {% if current_user %}
+          <a href="/recommendations">For You</a>
+          {% if current_user.role.value == "admin" %}
+            <a href="/admin/products">Admin</a>
+          {% endif %}
+          <span class="user-chip">{{ current_user.email }}</span>
+          <a href="/logout">Log out</a>
+        {% else %}
+          <a href="/login">Log in</a>
+          <a href="/register" class="btn-ghost">Sign up</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/tracker.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

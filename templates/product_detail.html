@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ product.title }} · SmartReco{% endblock %}
+{% block content %}
+<div class="product-detail">
+  <span class="category">{{ product.category }}</span>
+  <h1>{{ product.title }}</h1>
+  <div class="meta-row" style="margin-bottom:10px;">
+    <span class="price-tag">${{ "%.2f"|format(product.price) }}</span>
+    <span>{{ product.level or "" }}</span>
+  </div>
+  <p class="description">{{ product.description }}</p>
+</div>
+
+{% if related %}
+<h2 style="margin-top:36px;">More in {{ product.category }}</h2>
+<div class="product-grid">
+  {% for p in related %}
+  <a class="product-card" href="/products/{{ p.id }}" style="text-decoration:none; color:inherit;">
+    <span class="category">{{ p.category }}</span>
+    <h3>{{ p.title }}</h3>
+    <p>{{ p.description[:90] }}...</p>
+    <div class="meta-row"><span class="price-tag">${{ "%.2f"|format(p.price) }}</span></div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    window.SmartReco && window.SmartReco.trackProductView({{ product.id }});
+  });
+</script>
+{% endblock %}

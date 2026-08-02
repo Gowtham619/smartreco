@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Courses · SmartReco{% endblock %}
+{% block content %}
+<h1>Courses</h1>
+<form class="search-bar" method="get" action="/products" id="search-form">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search courses, e.g. 'agentic ai'" />
+  {% if active_category %}<input type="hidden" name="category" value="{{ active_category }}" />{% endif %}
+  <button type="submit" class="btn-primary">Search</button>
+</form>
+
+<div class="filters">
+  <a class="filter-chip {{ 'active' if not active_category }}" href="/products{{ '?q=' + q if q else '' }}">All</a>
+  {% for c in categories %}
+  <a class="filter-chip {{ 'active' if active_category == c }}" href="/products?category={{ c }}{{ '&q=' + q if q else '' }}">{{ c }}</a>
+  {% endfor %}
+</div>
+
+<div class="product-grid">
+  {% for p in products %}
+  <a class="product-card" data-track-click="product" data-product-id="{{ p.id }}" href="/products/{{ p.id }}" style="text-decoration:none; color:inherit;">
+    <span class="category">{{ p.category }}</span>
+    <h3>{{ p.title }}</h3>
+    <p>{{ p.description[:110] }}{% if p.description|length > 110 %}...{% endif %}</p>
+    <div class="meta-row">
+      <span class="price-tag">${{ "%.2f"|format(p.price) }}</span>
+      <span>{{ p.level or "" }}</span>
+    </div>
+  </a>
+  {% else %}
+  <div class="empty-state">No courses match that search.</div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var q = {{ q|tojson }};
+    if (q) {
+      window.SmartReco && window.SmartReco.track('search', { query: q });
+    }
+    document.querySelectorAll('[data-track-click="product"]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        window.SmartReco && window.SmartReco.track('click', {
+          product_id: parseInt(el.getAttribute('data-product-id'), 10),
+          context: 'listing',
+        });
+      });
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}For You · SmartReco{% endblock %}
+{% block content %}
+<h1>Recommended for you</h1>
+
+{% if rec %}
+<div class="rec-hero">
+  <div class="narrative">{{ rec.narrative }}</div>
+  <div class="meta">Generated {{ rec.created_at.strftime("%b %d, %Y %H:%M UTC") }} &middot; trigger: {{ rec.trigger_reason or "n/a" }}</div>
+</div>
+
+<div class="rec-items">
+  {% for entry in items %}
+  <a class="rec-item" href="/products/{{ entry.product.id }}" style="text-decoration:none; color:inherit;">
+    <span class="rec-rank">{{ entry.rank }}</span>
+    <div>
+      <span class="category">{{ entry.product.category }}</span>
+      <h3 style="margin:4px 0;">{{ entry.product.title }}</h3>
+      {% if entry.reason %}<p class="reason">{{ entry.reason }}</p>{% endif %}
+      <div class="meta-row" style="margin-top:6px;"><span class="price-tag">${{ "%.2f"|format(entry.product.price) }}</span></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No recommendations yet — browse a few courses or run a search and check back.</p>
+  <a href="/products" class="btn-primary" style="text-decoration:none; display:inline-block; margin-top:10px;">Browse courses</a>
+</div>
+{% endif %}
+
+<form method="post" action="/recommendations/refresh" style="margin-top:24px;">
+  <button type="submit" class="btn-secondary">Refresh recommendations now</button>
+</form>
+{% endblock %}

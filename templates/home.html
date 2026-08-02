@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}SmartReco — Learn what actually moves you forward{% endblock %}
+{% block content %}
+<div class="hero">
+  <h1>Courses that learn what you're actually into.</h1>
+  <p>Browse, search, and click around — SmartReco quietly watches what catches your attention and builds you a personalized, persuasive recommendation as you go.</p>
+  <a href="/products" class="btn-primary" style="text-decoration:none; display:inline-block;">Browse courses</a>
+  {% if current_user %}
+  <a href="/recommendations" class="btn-secondary" style="text-decoration:none; display:inline-block; margin-left:10px;">See my recommendations</a>
+  {% endif %}
+</div>
+
+<h2>Freshly added</h2>
+<div class="product-grid">
+  {% for p in featured %}
+  <a class="product-card" href="/products/{{ p.id }}" style="text-decoration:none; color:inherit;">
+    <span class="category">{{ p.category }}</span>
+    <h3>{{ p.title }}</h3>
+    <p>{{ p.description[:110] }}{% if p.description|length > 110 %}...{% endif %}</p>
+    <div class="meta-row">
+      <span class="price-tag">${{ "%.2f"|format(p.price) }}</span>
+      <span>{{ p.level or "" }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

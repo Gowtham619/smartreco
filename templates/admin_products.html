@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Admin · Products{% endblock %}
+{% block content %}
+<div class="admin-toolbar">
+  <h1>Product catalog</h1>
+  <div>
+    <form method="post" action="/admin/products/resync" style="display:inline">
+      <button type="submit" class="btn-secondary">Resync vector store</button>
+    </form>
+    <a href="/admin/products/new" class="btn-primary" style="margin-left:8px; text-decoration:none; display:inline-block;">+ New product</a>
+  </div>
+</div>
+<table class="admin-table">
+  <thead>
+    <tr><th>Title</th><th>Category</th><th>Price</th><th>Sync</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for p in products %}
+    <tr>
+      <td>{{ p.title }}</td>
+      <td>{{ p.category }}</td>
+      <td>${{ "%.2f"|format(p.price) }}</td>
+      <td><span class="status-badge {{ p.sync_status.value }}">{{ p.sync_status.value }}</span></td>
+      <td>
+        <a class="action-link" href="/admin/products/{{ p.id }}/edit">Edit</a>
+        <form method="post" action="/admin/products/{{ p.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this product?')">
+          <button type="submit" class="action-link danger" style="background:none;border:none;cursor:pointer;padding:0;">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="empty-state">No products yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
