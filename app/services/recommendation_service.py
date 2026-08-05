@@ -43,7 +43,14 @@ def _run_generation(db: Session, user_id: int, trigger_reason: str) -> Recommend
     db.commit()
     try:
         graph = build_graph()
-        result = graph.invoke({"db": db, "user_id": user_id, "trigger_reason": trigger_reason})
+        result = graph.invoke(
+            {"db": db, "user_id": user_id, "trigger_reason": trigger_reason},
+            config={
+                "run_name": f"recommendation:{trigger_reason}",
+                "tags": [trigger_reason],
+                "metadata": {"user_id": user_id, "trigger_reason": trigger_reason},
+            },
+        )
         narrative = result.get("narrative") or "Here's what SmartReco thinks fits where you're headed."
         picks = result.get("picks", [])
 

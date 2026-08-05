@@ -10,7 +10,7 @@ class FakeGraph:
         self._exc = exc
         self.invocations = 0
 
-    def invoke(self, state):
+    def invoke(self, state, config=None):
         self.invocations += 1
         if self._exc:
             raise self._exc
