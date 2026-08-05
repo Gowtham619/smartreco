@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: smartreco
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.9
+      - key: MESH_API_KEY
+        sync: false
+      - key: MESH_BASE_URL
+        value: https://api.meshapi.ai/v1
+      - key: MESH_CHAT_MODEL
+        value: openai/gpt-4o-mini
+      - key: MESH_EMBEDDING_MODEL
+        value: openai/text-embedding-3-small
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./data/smartreco.db
+      - key: CHROMA_PERSIST_DIR
+        value: ./data/chroma
+      - key: ADMIN_EMAIL
+        value: admin@smartreco.local
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AUTO_SEED
+        value: "true"
+      - key: RECOMMENDATION_EVENT_THRESHOLD
+        value: "5"
+      - key: RECOMMENDATION_FIRST_EVENT_THRESHOLD
+        value: "3"
+      - key: RECOMMENDATION_COOLDOWN_MINUTES
+        value: "5"
+      - key: SCHEDULER_REFRESH_MINUTES
+        value: "20"
+      - key: DIGEST_HOUR
+        value: "17"
+      - key: DIGEST_MINUTE
+        value: "0"

@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,6 +18,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if os.getenv("AUTO_SEED", "false").lower() == "true":
+        # Hosts with ephemeral disks (e.g. Render's free tier) lose SQLite/Chroma
+        # data on redeploy or spin-down; reseeding is idempotent and cheap, so we
+        # self-heal on every boot instead of shipping a demo with an empty catalog.
+        from app.seed import seed
+
+        seed()
     start_scheduler()
     yield
     shutdown_scheduler()
