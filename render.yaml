@@ -8,6 +8,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.9
+      # Works around a real class of bug on some virtualized/shared-vCPU cloud
+      # hosts: numpy/hnswlib's native code auto-detects AVX-512 via cpuid and
+      # uses it, but the hypervisor advertises support it can't actually
+      # execute, crashing with SIGILL (exit 132) the first time that code path
+      # runs. Forcing numpy off AVX-512 avoids tripping it.
+      - key: NPY_DISABLE_CPU_FEATURES
+        value: "AVX512F AVX512CD AVX512_SKX AVX512_CLX AVX512_ICL AVX512_KNL AVX512_KNM"
       - key: MESH_API_KEY
         sync: false
       - key: MESH_BASE_URL

@@ -24,6 +24,21 @@ COLLECTION_NAME = "products"
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
+class _UnusedEmbeddingFunction:
+    """Every call site here supplies precomputed Mesh embeddings explicitly, so
+    this should never actually run. It exists only to stop Chroma from falling
+    back to its bundled ONNX MiniLM default, which pulls in onnxruntime — that
+    native dependency has been observed to crash with SIGILL on some cloud
+    hosts' CPUs (e.g. Render) the moment a collection touches it, even though
+    we never call it."""
+
+    def __call__(self, input):  # noqa: A002 - name required by Chroma's protocol
+        raise RuntimeError(
+            "SmartReco always supplies embeddings explicitly; Chroma's default "
+            "embedding function should never be invoked."
+        )
+
+
 def _persist_dir() -> str:
     persist_dir = settings.chroma_persist_dir
     if persist_dir.startswith("./"):
@@ -35,7 +50,9 @@ def _get_collection():
     global _client, _collection
     if _collection is None:
         _client = chromadb.PersistentClient(path=_persist_dir())
-        _collection = _client.get_or_create_collection(COLLECTION_NAME)
+        _collection = _client.get_or_create_collection(
+            COLLECTION_NAME, embedding_function=_UnusedEmbeddingFunction()
+        )
     return _collection
 
 
