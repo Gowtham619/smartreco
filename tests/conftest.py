@@ -9,6 +9,13 @@ import tempfile
 _TEST_DIR = tempfile.mkdtemp(prefix="smartreco-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DIR}/test.db"
 os.environ["QDRANT_LOCAL_PATH"] = f"{_TEST_DIR}/qdrant"
+# Force local-mode Qdrant and disable tracing even if the developer's real
+# .env has them configured — app/config.py's load_dotenv() would otherwise
+# leak a real QDRANT_URL/LangSmith project into every test run.
+os.environ["QDRANT_URL"] = ""
+os.environ["QDRANT_API_KEY"] = ""
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 os.environ["MESH_API_KEY"] = "test-key-not-real"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["ADMIN_EMAIL"] = "admin@test.local"

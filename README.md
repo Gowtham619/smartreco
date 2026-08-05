@@ -102,8 +102,14 @@ problem for vector data. See the docstring in `app/services/vector_store.py` for
   SMTP if configured; otherwise the email body is logged so the app stays runnable
   without mail credentials.
 - ⭐ **Observability** — the agent's Mesh calls go through `langchain_openai.ChatOpenAI` /
-  `OpenAIEmbeddings`, so setting `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` traces
-  the full LangGraph run in LangSmith with zero extra instrumentation code.
+  `OpenAIEmbeddings`, so setting `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` traces the
+  full LangGraph run in LangSmith with zero extra instrumentation code — each run is also
+  tagged with the trigger reason and `user_id` (see `recommendation_service._run_generation`)
+  so traces are filterable by *why* a recommendation fired and for *whom*, not just a wall
+  of identically-named node runs. Note: LangSmith's SDK reads these vars straight from the
+  process environment, not through our own config — `app/config.py` calls `load_dotenv()`
+  specifically so values in `.env` actually reach it (pydantic-settings' own env-file
+  loading only populates our internal `Settings` object, not `os.environ`).
 - ⭐ **Retrieval polish** — category metadata filtering at retrieval time, a broaden-and-
   retry loop when the filtered query comes back thin, and an LLM rerank/reason pass over
   the retrieved candidates before the narrative is written.
@@ -163,7 +169,7 @@ candidate set.
 | `RECOMMENDATION_EVENT_THRESHOLD`, `RECOMMENDATION_FIRST_EVENT_THRESHOLD`, `RECOMMENDATION_COOLDOWN_MINUTES` | Trigger tuning |
 | `SCHEDULER_REFRESH_MINUTES`, `DIGEST_HOUR`, `DIGEST_MINUTE` | Scheduler cadence |
 | `SMTP_*` | Optional real email delivery for the daily digest |
-| `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | Optional LangSmith tracing |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | Optional LangSmith tracing |
 
 ## Deploying (Render, free tier)
 

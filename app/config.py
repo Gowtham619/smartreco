@@ -1,4 +1,12 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# pydantic-settings' env_file only populates *our* Settings fields below — it
+# never touches the real process environment. Libraries that read os.environ
+# directly (LangSmith's tracing, which activates purely off LANGSMITH_*/
+# LANGCHAIN_* env vars, not anything we pass it) would silently see nothing
+# without this. override=False so already-exported shell/CI env vars win.
+load_dotenv(override=False)
 
 
 class Settings(BaseSettings):
@@ -42,11 +50,6 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from: str = "smartreco@example.com"
-
-    # LangSmith
-    langchain_tracing_v2: bool = False
-    langchain_api_key: str = ""
-    langchain_project: str = "smartreco"
 
     submission_token: str = ""
 
