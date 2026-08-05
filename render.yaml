@@ -8,11 +8,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.9
-      # Works around a real class of bug on some virtualized/shared-vCPU cloud
-      # hosts: numpy/hnswlib's native code auto-detects AVX-512 via cpuid and
-      # uses it, but the hypervisor advertises support it can't actually
-      # execute, crashing with SIGILL (exit 132) the first time that code path
-      # runs. Forcing numpy off AVX-512 avoids tripping it.
+      # Defensive: avoids a known class of SIGILL crash on some virtualized/
+      # shared-vCPU cloud hosts where cpuid over-reports AVX-512 support.
+      # Harmless to keep even though the vector store no longer relies on any
+      # native SIMD extension (see QDRANT_URL below and vector_store.py).
       - key: NPY_DISABLE_CPU_FEATURES
         value: "AVX512F AVX512CD AVX512_SKX AVX512_CLX AVX512_ICL AVX512_KNL AVX512_KNM"
       - key: MESH_API_KEY
@@ -23,12 +22,23 @@ services:
         value: openai/gpt-4o-mini
       - key: MESH_EMBEDDING_MODEL
         value: openai/text-embedding-3-small
+      - key: MESH_EMBEDDING_DIM
+        value: "1536"
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
         value: sqlite:///./data/smartreco.db
-      - key: CHROMA_PERSIST_DIR
-        value: ./data/chroma
+      # Required for deployment: Chroma's local mode crashed on Render's CPU
+      # (SIGILL inside its native hnswlib extension). Qdrant's local mode is
+      # pure Python and would work, but a real Qdrant Cloud instance (free
+      # tier) is used instead so vector data also survives redeploys, which
+      # Render's ephemeral disk otherwise wouldn't allow. Get a free cluster
+      # at cloud.qdrant.io and fill these in — the app falls back to Qdrant's
+      # embedded local mode (and an ephemeral disk) if left blank.
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
       - key: ADMIN_EMAIL
         value: admin@smartreco.local
       - key: ADMIN_PASSWORD

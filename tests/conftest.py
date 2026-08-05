@@ -1,14 +1,14 @@
 """Test env vars must be set before any `app.*` module is imported, since
 app/config.py builds its Settings() singleton at import time. This keeps
-tests on an isolated SQLite file + Chroma dir and never touches the real
-Mesh account (LLM/embedding calls are monkeypatched per-test instead)."""
+tests on an isolated SQLite file + Qdrant local-mode dir and never touches the
+real Mesh account (LLM/embedding calls are monkeypatched per-test instead)."""
 
 import os
 import tempfile
 
 _TEST_DIR = tempfile.mkdtemp(prefix="smartreco-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DIR}/test.db"
-os.environ["CHROMA_PERSIST_DIR"] = f"{_TEST_DIR}/chroma"
+os.environ["QDRANT_LOCAL_PATH"] = f"{_TEST_DIR}/qdrant"
 os.environ["MESH_API_KEY"] = "test-key-not-real"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["ADMIN_EMAIL"] = "admin@test.local"

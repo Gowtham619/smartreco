@@ -9,11 +9,19 @@ class Settings(BaseSettings):
     mesh_base_url: str = "https://api.meshapi.ai/v1"
     mesh_chat_model: str = "openai/gpt-4o-mini"
     mesh_embedding_model: str = "openai/text-embedding-3-small"
+    mesh_embedding_dim: int = 1536  # must match mesh_embedding_model's output size
 
     # App
     secret_key: str = "dev-secret-change-me"
     database_url: str = "sqlite:///./data/smartreco.db"
-    chroma_persist_dir: str = "./data/chroma"
+
+    # Vector store (Qdrant). Leave qdrant_url empty for local embedded mode
+    # (pure Python, no server needed) — set it to use a real Qdrant server/
+    # Qdrant Cloud instance instead (required for hosts like Render where a
+    # native vector-index extension can crash — see vector_store.py).
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_local_path: str = "./data/qdrant"
 
     admin_email: str = "admin@smartreco.local"
     admin_password: str = "change-me"

@@ -2,7 +2,7 @@
 
 A behavioral AI recommendation agent for a course marketplace. It tracks what a user does
 (views, searches, clicks, time spent), reasons about their interests with a LangGraph agent,
-retrieves the most relevant courses via RAG over a Chroma vector store, and generates a
+retrieves the most relevant courses via RAG over a Qdrant vector store, and generates a
 persuasive, catalog-grounded recommendation that refreshes as behavior changes.
 
 Built for the SmartReco Build Challenge 2026.
@@ -23,7 +23,7 @@ Browser (tracker.js)                FastAPI backend
                                           recent events into an interest profile)
                                             │
                                             ▼
-                                          retrieve (Mesh embeddings ──▶ Chroma
+                                          retrieve (Mesh embeddings ──▶ Qdrant
                                           top-k, metadata-filtered by category)
                                             │
                                             ▼
@@ -41,10 +41,18 @@ Browser (tracker.js)                FastAPI backend
 ```
 
 Admin product CRUD dual-writes: every create/update writes to SQLite first, then upserts
-the same row into Chroma (embedded through Mesh). If the vector write fails, the SQL row
+the same row into Qdrant (embedded through Mesh). If the vector write fails, the SQL row
 is marked `sync_status=error` (never crashes the request) and an admin "Resync vector
 store" action retries it — verified live by breaking the Mesh key and watching product
 rows land in SQL with `error` status, then clearing after a successful resync.
+
+**Vector store note:** this originally used Chroma. Its embedded mode's native `hnswlib`
+extension crashed with `SIGILL` on Render's free-tier CPU — a virtualized-host bug where
+`cpuid` over-reports AVX-512 support the hypervisor can't actually execute, not anything
+specific to how we used it. Qdrant was swapped in instead: its embedded "local mode" is
+pure Python (no native extension, so no equivalent crash risk) for local dev, and a real
+Qdrant Cloud instance is used in production, which also solves Render's ephemeral-disk
+problem for vector data. See the docstring in `app/services/vector_store.py` for detail.
 
 ## What's implemented
 
@@ -54,7 +62,7 @@ rows land in SQL with `error` status, then clearing after a successful resync.
   `recommendation_state` (the last one tracks per-user trigger/cooldown bookkeeping).
 
 **Product management with dual-write**
-- Admin CRUD UI at `/admin/products` (create/edit/delete), writing to SQLite + Chroma.
+- Admin CRUD UI at `/admin/products` (create/edit/delete), writing to SQLite + Qdrant.
 - `sync_status` (`synced`/`pending`/`error`) surfaced in the UI, with a one-click resync.
 
 **Behavioral tracking**
@@ -68,7 +76,7 @@ rows land in SQL with `error` status, then clearing after a successful resync.
 **Agentic recommendation engine**
 - LangGraph `StateGraph` with a real conditional edge: `retrieve` → `evaluate_retrieval`
   → (retry once with a broadened query if too few results) → `generate`.
-- Retrieval is grounded in the actual catalog (Chroma top-k + category metadata filter);
+- Retrieval is grounded in the actual catalog (Qdrant top-k + category metadata filter);
   the generation step validates that every recommended `product_id` was actually
   retrieved, dropping anything hallucinated.
 - One LLM call does both the ranking/reasoning ("retrieval polish") and the persuasive
@@ -102,7 +110,8 @@ rows land in SQL with `error` status, then clearing after a successful resync.
 
 ## Setup
 
-Requires Python 3.13 (chromadb's dependencies don't yet build on 3.14).
+Requires Python 3.13 (that's what this was built and verified against; not a hard
+requirement of the current dependencies the way it was when this used Chroma).
 
 ```bash
 cd smartreco
@@ -114,6 +123,10 @@ cp .env.example .env
 python -m app.seed        # creates the admin user + an 18-course sample catalog (dual-written)
 uvicorn app.main:app --reload --port 8010
 ```
+
+No separate vector DB setup needed for local dev — leaving `QDRANT_URL` unset in `.env`
+uses `qdrant-client`'s embedded local mode (a local file-backed store under `./data/qdrant`,
+no server required).
 
 Visit `http://localhost:8010`. Log in as the seeded admin with `ADMIN_EMAIL` /
 `ADMIN_PASSWORD` from `.env` to manage the catalog at `/admin/products`, or register a
@@ -133,7 +146,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The suite runs against an isolated temp SQLite DB/Chroma dir (never your real `.env`
+The suite runs against an isolated temp SQLite DB/Qdrant local-mode dir (never your real `.env`
 values) and never calls Mesh — LLM/embedding calls are monkeypatched per-test. It covers
 the parts most likely to hide real bugs: dual-write success/failure/resync, the
 event-threshold + cooldown trigger gating, the retrieve→evaluate→retry loop, and the
@@ -145,7 +158,8 @@ candidate set.
 | Variable | Purpose |
 |---|---|
 | `MESH_API_KEY`, `MESH_BASE_URL` | Mesh gateway credentials/endpoint (mandatory for all LLM calls) |
-| `MESH_CHAT_MODEL`, `MESH_EMBEDDING_MODEL` | Models used for generation and retrieval |
+| `MESH_CHAT_MODEL`, `MESH_EMBEDDING_MODEL`, `MESH_EMBEDDING_DIM` | Models used for generation/retrieval, and the embedding vector size |
+| `QDRANT_URL`, `QDRANT_API_KEY` | Point at a real Qdrant server/Cloud instance; leave blank for local embedded mode |
 | `RECOMMENDATION_EVENT_THRESHOLD`, `RECOMMENDATION_FIRST_EVENT_THRESHOLD`, `RECOMMENDATION_COOLDOWN_MINUTES` | Trigger tuning |
 | `SCHEDULER_REFRESH_MINUTES`, `DIGEST_HOUR`, `DIGEST_MINUTE` | Scheduler cadence |
 | `SMTP_*` | Optional real email delivery for the daily digest |
@@ -155,26 +169,32 @@ candidate set.
 
 `render.yaml` defines the service as a Render Blueprint:
 
-1. Push this repo to GitHub (already done if you're reading this from the repo).
-2. On Render: New → Blueprint → connect the repo → Render reads `render.yaml` automatically.
-3. Render will prompt for the two secrets not stored in the blueprint: `MESH_API_KEY` and
-   `ADMIN_PASSWORD`. `SECRET_KEY` is auto-generated by Render.
-4. Deploy. `AUTO_SEED=true` is set in the blueprint, so the app seeds its own admin user +
+1. Create a free [Qdrant Cloud](https://cloud.qdrant.io) cluster and grab its URL + API key.
+   (Required for deployment — see the vector store note above for why local-mode Chroma,
+   and by extension anything relying on a native vector-index extension, isn't safe to run
+   on Render's free-tier CPU. Qdrant Cloud's free tier is unaffected since it's a remote
+   server, not code running inside your app's container.)
+2. Push this repo to GitHub (already done if you're reading this from the repo).
+3. On Render: New → Blueprint → connect the repo → Render reads `render.yaml` automatically.
+4. Render will prompt for the secrets not stored in the blueprint: `MESH_API_KEY`,
+   `ADMIN_PASSWORD`, `QDRANT_URL`, and `QDRANT_API_KEY`. `SECRET_KEY` is auto-generated.
+5. Deploy. `AUTO_SEED=true` is set in the blueprint, so the app seeds its own admin user +
    sample catalog on every boot.
 
-**Caveat:** Render's free web services use an ephemeral filesystem — SQLite and Chroma data
-(both under `./data`) do not reliably survive a redeploy or a spin-down/spin-up cycle. That's
-why auto-seeding on startup exists: the app self-heals back to a working demo state instead
-of booting with an empty catalog, but any user accounts/events/recommendations created during
-a session will be lost when the instance recycles. For real persistence, either upgrade to a
-Render paid disk, or deploy to a host with a persistent volume (e.g. Fly.io).
+**Caveat:** Render's free web services use an ephemeral filesystem — SQLite data (under
+`./data`) does not reliably survive a redeploy or a spin-down/spin-up cycle. Vector data is
+fine (it lives in Qdrant Cloud, not on Render's disk), but SQLite is why auto-seeding on
+startup exists: the app self-heals back to a working demo state instead of booting with an
+empty catalog, though any user accounts/events/recommendations created during a session are
+lost when the instance recycles. For full persistence, either upgrade to a Render paid disk,
+or deploy to a host with a persistent volume (e.g. Fly.io).
 
 ## Project layout
 
 See inline comments in `app/main.py` for the router wiring. Key modules:
 
 - `app/agent/` — the LangGraph recommendation agent (state, nodes, graph, prompts)
-- `app/services/vector_store.py` — Chroma wrapper (Mesh-embedded, never Chroma's default embedder)
+- `app/services/vector_store.py` — Qdrant wrapper (Mesh-embedded; local mode for dev, real Qdrant Cloud in production)
 - `app/services/product_service.py` — dual-write create/update/delete + resync
 - `app/services/recommendation_service.py` — trigger/cooldown/dedup logic, persistence
 - `app/scheduler.py` — APScheduler jobs (refresh safety-net + daily digest)

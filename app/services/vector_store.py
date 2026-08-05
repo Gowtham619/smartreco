@@ -1,59 +1,71 @@
-"""Chroma-backed semantic index for the product catalog.
+"""Qdrant-backed semantic index for the product catalog.
 
 Products are dual-written here from app.services.product_service whenever
 they're created/updated/deleted in SQL, so retrieval is always grounded in
-the real catalog. Embeddings are generated through Mesh (see mesh_client.py),
-never through Chroma's own default embedding function.
+the real catalog. Embeddings are generated through Mesh (see mesh_client.py)
+and always supplied explicitly — this module never asks Qdrant/any client
+library to compute embeddings itself.
+
+Backend selection: if QDRANT_URL is set, this talks to a real Qdrant server
+(e.g. Qdrant Cloud's free tier). If it's unset, qdrant-client's embedded
+"local mode" is used instead — a pure-Python implementation with no native
+extension, so it needs no separate service for local development. (We
+originally used Chroma here; it was swapped out after Chroma's native
+hnswlib extension crashed with SIGILL on Render's free-tier CPU — a
+virtualized-host CPU-feature-detection bug, not anything specific to our
+usage. Qdrant's local mode being pure Python sidesteps that whole class of
+bug, and pointing QDRANT_URL at a real cluster in production avoids it too.)
 """
 
 import logging
 from pathlib import Path
 from typing import Any, Optional
 
-import chromadb
+from qdrant_client import QdrantClient
+from qdrant_client.http import models as qmodels
 
 from app.config import settings
 from app.services.mesh_client import get_embeddings_model
 
 logger = logging.getLogger("smartreco.vector_store")
 
-_client: chromadb.ClientAPI | None = None
-_collection = None
-
 COLLECTION_NAME = "products"
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-
-class _UnusedEmbeddingFunction:
-    """Every call site here supplies precomputed Mesh embeddings explicitly, so
-    this should never actually run. It exists only to stop Chroma from falling
-    back to its bundled ONNX MiniLM default, which pulls in onnxruntime — that
-    native dependency has been observed to crash with SIGILL on some cloud
-    hosts' CPUs (e.g. Render) the moment a collection touches it, even though
-    we never call it."""
-
-    def __call__(self, input):  # noqa: A002 - name required by Chroma's protocol
-        raise RuntimeError(
-            "SmartReco always supplies embeddings explicitly; Chroma's default "
-            "embedding function should never be invoked."
-        )
+_client: Optional[QdrantClient] = None
+_collection_ready = False
 
 
-def _persist_dir() -> str:
-    persist_dir = settings.chroma_persist_dir
-    if persist_dir.startswith("./"):
-        return str(BASE_DIR / persist_dir.removeprefix("./"))
-    return persist_dir
+def _local_path() -> str:
+    path = settings.qdrant_local_path
+    if path.startswith("./"):
+        return str(BASE_DIR / path.removeprefix("./"))
+    return path
 
 
-def _get_collection():
-    global _client, _collection
-    if _collection is None:
-        _client = chromadb.PersistentClient(path=_persist_dir())
-        _collection = _client.get_or_create_collection(
-            COLLECTION_NAME, embedding_function=_UnusedEmbeddingFunction()
-        )
-    return _collection
+def _get_client() -> QdrantClient:
+    global _client
+    if _client is None:
+        if settings.qdrant_url:
+            _client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+        else:
+            _client = QdrantClient(path=_local_path())
+    return _client
+
+
+def _ensure_collection() -> QdrantClient:
+    global _collection_ready
+    client = _get_client()
+    if not _collection_ready:
+        if not client.collection_exists(COLLECTION_NAME):
+            client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=qmodels.VectorParams(
+                    size=settings.mesh_embedding_dim, distance=qmodels.Distance.COSINE
+                ),
+            )
+        _collection_ready = True
+    return client
 
 
 def _document_text(title: str, description: str, category: str) -> str:
@@ -65,49 +77,61 @@ def upsert_product(
 ) -> None:
     doc = _document_text(title, description, category)
     embedding = get_embeddings_model().embed_documents([doc])[0]
-    _get_collection().upsert(
-        ids=[str(product_id)],
-        embeddings=[embedding],
-        documents=[doc],
-        metadatas=[
-            {
-                "title": title,
-                "category": category,
-                "price": float(price),
-                "level": level or "",
-            }
+    client = _ensure_collection()
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=[
+            qmodels.PointStruct(
+                id=product_id,
+                vector=embedding,
+                payload={
+                    "title": title,
+                    "category": category,
+                    "price": float(price),
+                    "level": level or "",
+                },
+            )
         ],
     )
 
 
 def delete_product(product_id: int) -> None:
     try:
-        _get_collection().delete(ids=[str(product_id)])
+        client = _ensure_collection()
+        client.delete(collection_name=COLLECTION_NAME, points_selector=qmodels.PointIdsList(points=[product_id]))
     except Exception:
         logger.warning("Failed to delete product %s from vector store", product_id, exc_info=True)
 
 
 def query(query_text: str, top_k: int = 10, category: Optional[str] = None) -> list[dict[str, Any]]:
-    embedding = get_embeddings_model().embed_query(query_text)
-    where = {"category": category} if category else None
-    collection = _get_collection()
-    count = collection.count()
+    client = _ensure_collection()
+    try:
+        count = client.count(collection_name=COLLECTION_NAME).count
+    except Exception:
+        count = 0
     if count == 0:
         return []
-    result = collection.query(
-        query_embeddings=[embedding],
-        n_results=min(top_k, count),
-        where=where,
+
+    embedding = get_embeddings_model().embed_query(query_text)
+    query_filter = None
+    if category:
+        query_filter = qmodels.Filter(
+            must=[qmodels.FieldCondition(key="category", match=qmodels.MatchValue(value=category))]
+        )
+
+    result = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=embedding,
+        query_filter=query_filter,
+        limit=min(top_k, count),
     )
-    if not result["ids"] or not result["ids"][0]:
-        return []
     out = []
-    for i, doc_id in enumerate(result["ids"][0]):
+    for point in result.points:
         out.append(
             {
-                "product_id": int(doc_id),
-                "metadata": result["metadatas"][0][i],
-                "distance": result["distances"][0][i] if result.get("distances") else None,
+                "product_id": int(point.id),
+                "metadata": point.payload,
+                "score": point.score,  # cosine similarity: higher is closer, unlike Chroma's distance
             }
         )
     return out
