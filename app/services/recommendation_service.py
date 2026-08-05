@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import Recommendation, RecommendationItem, RecommendationState, User
 from app.services import event_service
+from app.utils import utcnow
 
 logger = logging.getLogger("smartreco.recommendation_service")
 
@@ -33,7 +34,7 @@ def _threshold_for(state: RecommendationState) -> int:
 def _cooldown_active(state: RecommendationState) -> bool:
     if not state.last_generated_at:
         return False
-    return datetime.utcnow() - state.last_generated_at < timedelta(minutes=settings.recommendation_cooldown_minutes)
+    return utcnow() - state.last_generated_at < timedelta(minutes=settings.recommendation_cooldown_minutes)
 
 
 def _run_generation(db: Session, user_id: int, trigger_reason: str) -> Recommendation:
@@ -63,7 +64,7 @@ def _run_generation(db: Session, user_id: int, trigger_reason: str) -> Recommend
                     reason=pick.get("reason"),
                 )
             )
-        state.last_generated_at = datetime.utcnow()
+        state.last_generated_at = utcnow()
         state.event_count_at_last_gen = event_service.total_event_count(db, user_id)
         state.generating = False
         db.commit()
@@ -120,7 +121,10 @@ def maybe_trigger_regeneration(user_id: int, reason: str = "activity_threshold")
         new_events = total_events - (state.event_count_at_last_gen or 0)
         if new_events < _threshold_for(state):
             return
-        _run_generation(db, user_id, reason)
+        try:
+            _run_generation(db, user_id, reason)
+        except Exception:
+            pass  # already logged in _run_generation; don't crash the background task
     finally:
         db.close()
 

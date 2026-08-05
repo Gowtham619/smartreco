@@ -122,7 +122,23 @@ normal account to browse and get recommendations at `/recommendations`.
 Note: both chat and embedding calls go through Mesh's **paid** models (there is currently
 no free-tier embedding model on Mesh), so your Mesh account needs a positive balance for
 live retrieval/generation to succeed — otherwise the agent still runs end-to-end but falls
-back to a generic "explore more" recommendation instead of a real one.
+back to a generic "explore more" recommendation instead of a real one. At current Mesh
+pricing this app costs roughly $0.0007 per recommendation generation and a fraction of a
+cent to embed the whole sample catalog — a $1-5 top-up covers thousands of test runs.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite runs against an isolated temp SQLite DB/Chroma dir (never your real `.env`
+values) and never calls Mesh — LLM/embedding calls are monkeypatched per-test. It covers
+the parts most likely to hide real bugs: dual-write success/failure/resync, the
+event-threshold + cooldown trigger gating, the retrieve→evaluate→retry loop, and the
+grounding guard that drops any LLM-recommended product id not actually in the retrieved
+candidate set.
 
 ### Key environment variables (see `.env.example` for the full list)
 

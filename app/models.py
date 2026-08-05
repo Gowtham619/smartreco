@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils import utcnow
 
 
 class UserRole(str, enum.Enum):
@@ -43,7 +44,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.user, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     events: Mapped[list["Event"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     recommendations: Mapped[list["Recommendation"]] = relationship(
@@ -63,9 +64,9 @@ class Product(Base):
     sync_status: Mapped[SyncStatus] = mapped_column(
         Enum(SyncStatus), default=SyncStatus.pending, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
 
 
@@ -79,7 +80,7 @@ class Event(Base):
     query: Mapped[str] = mapped_column(String(255), nullable=True)
     meta: Mapped[dict] = mapped_column(JSON, nullable=True)
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     user: Mapped["User"] = relationship(back_populates="events")
 
@@ -92,7 +93,7 @@ class Recommendation(Base):
     narrative: Mapped[str] = mapped_column(Text, nullable=False)
     trigger_reason: Mapped[str] = mapped_column(String(120), nullable=True)
     model_used: Mapped[str] = mapped_column(String(120), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     user: Mapped["User"] = relationship(back_populates="recommendations")
     items: Mapped[list["RecommendationItem"]] = relationship(

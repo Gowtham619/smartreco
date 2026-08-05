@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import Event, Product, User
 from app.services import email_service, recommendation_service
+from app.utils import utcnow
 
 logger = logging.getLogger("smartreco.scheduler")
 
@@ -23,7 +24,7 @@ def _refresh_job():
 def _daily_digest_job():
     db = SessionLocal()
     try:
-        today_start = datetime.combine(datetime.utcnow().date(), time.min)
+        today_start = datetime.combine(utcnow().date(), time.min)
         active_user_ids = {
             row[0]
             for row in db.query(Event.user_id).filter(Event.created_at >= today_start).distinct().all()
